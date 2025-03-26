@@ -1,0 +1,161 @@
+#include <xmotion.h>
+#include <NewPing.h>
+
+//Line Sensors
+#define LF_LEFT    A5   // Far left sensor
+#define LF_CENTER  A4   // Off-center (to the left) sensor
+#define LF_RIGHT   A2   // Right sensor
+
+#define LOST_LINE_THRESHOLD 500      
+#define BASE_SPEED         50  
+#define TURN_DELAY         200
+
+//Buttons
+#define START_BUTTON         10   // Button to start
+#define START_DELAY     1000      //  12 seconds
+
+//Ultrasonic
+#define MAX_DISTANCE 200
+NewPing US_LEFT(1,1, MAX_DISTANCE);
+NewPing US_CENTER(2,2, MAX_DISTANCE);
+NewPing US_RIGHT(4,4, MAX_DISTANCE);
+
+int lineThreshhold = 200;
+     
+
+//States of Robot used in loop/switch
+enum RobotState {
+  WAIT_DEBOUNCE,
+  LINE_FOLLOW,
+  TURN_RIGHT
+};
+
+RobotState state = WAIT_DEBOUNCE;
+unsigned long debounceStart = 0;
+unsigned long lostLineTimer = 0;
+
+
+// -----------------------------
+// Setup
+// -----------------------------
+void setup() {
+  // Initialize the JSUMO xmotion library
+
+ 
+  // Configure sensor pins
+  pinMode(LF_LEFT, INPUT);
+  pinMode(LF_CENTER, INPUT);
+  pinMode(LF_RIGHT, INPUT);
+ 
+  // Configure button pin (using internal pull-up)
+  pinMode(START_BUTTON, INPUT_PULLUP);
+}
+
+// -----------------------------
+// Main Loop
+// -----------------------------
+void loop() {
+  switch (state) {
+   
+    // --- WAIT_DEBOUNCE STATE ---
+    // Wait for a button press and then wait 15 seconds before starting line following.
+    case WAIT_DEBOUNCE:
+      // Wait for the button to be pressed.
+      if (digitalRead(START_BUTTON) == LOW) {
+      // Block until the button is released.
+      while (digitalRead(START_BUTTON) == LOW) {
+        delay(10); // Small delay to avoid busy-waiting.
+      }
+      // After release, wait 15 seconds.
+      delay(START_DELAY);
+      state = LINE_FOLLOW;
+      }
+    break;
+     
+    // --- LINE_FOLLOW STATE ---
+    // Follow the line using the three sensors. If no sensor detects the line
+    // for a set time, switch to TURN_RIGHT.
+    case LINE_FOLLOW: {
+      // 0 = white    1 = black
+      bool leftActive   = (digitalRead(LF_LEFT));
+      bool centerActive = (digitalRead(LF_CENTER));
+      bool rightActive  = (digitalRead(LF_RIGHT));
+ 
+      // If no sensor detects the line, start the lost-line timer.
+      if (!leftActive && !centerActive && !rightActive) {
+        if (lostLineTimer == 0) {
+          lostLineTimer = millis();
+        } else if (millis() - lostLineTimer >= LOST_LINE_THRESHOLD) {
+          state = TURN_RIGHT;
+          lostLineTimer = 0;
+          break;
+        }
+      } else {
+        // Reset the lost line timer if any sensor sees the line.
+        lostLineTimer = 0;
+       
+        // Adjust motor speeds based on sensor readings.
+        // Priority is given to the off-center sensor (LF_CENTER).
+        int leftSpeed = BASE_SPEED;
+        int rightSpeed = BASE_SPEED;
+       
+        if (centerActive) {
+          // Line is well aligned (off center sensor sees the line): drive straight.
+          DriveForward();
+        } else if (leftActive) {
+          // Line detected by the far left sensor: steer right.
+          DriveRight();
+        } else if (rightActive) {
+          // Line detected by the right sensor: steer left.
+          DriveLeft();
+        }
+       
+        // Set motor speeds using the JSUMO xmotion library.
+       xmotion.Right0(rightSpeed,20);xmotion.Left0(leftSpeed,20);
+      }
+      break;
+    }
+     
+    // --- TURN_RIGHT STATE ---
+    // When the line is lost, execute a turnaround maneuver until the line is found again.
+    case TURN_RIGHT: {
+      // Pivot in place: left motor reverse, right motor forward.
+       PivotRight();
+     
+      // Move forward briefly after the turn
+       DriveForward();
+     
+     
+      // Check sensors to see if the line is reacquired.
+      bool leftDetect   = (digitalRead(LF_LEFT) == HIGH);
+      bool centerDetect = (digitalRead(LF_CENTER) == HIGH);
+      bool rightDetect  = (digitalRead(LF_RIGHT) == HIGH);
+     
+      if (leftDetect || centerDetect || rightDetect) {
+        state = LINE_FOLLOW;
+      }
+      break;
+    }
+   
+    default:
+      state = WAIT_DEBOUNCE;
+      break;
+  }
+}
+
+
+void DriveForward(){
+  
+}
+
+void DriveLeft(){
+  
+}
+
+void DriveRight(){
+  
+}
+
+void PivotRight(){
+  
+}
