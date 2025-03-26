@@ -1,0 +1,60 @@
+//---------------------------------------------
+//Sensor Test Code
+//---------------------------------------------
+//Upload to xmotion board with up to three mini line followers and three ultrasonic sensors
+//Change variables within  "Line Followers and Ultrasonic Sensors"  sections
+//Open Tools>Serial Monitor and set baud rate to 9600 (bottom right selection)
+//Note: This code requires you to install the NewPing Library using the Arduino Library Manager
+
+
+#include <NewPing.h>
+
+//Physical Connections
+//Line Followers
+int ML_LEFT=A5; 
+int ML_CENTER=A4; 
+int ML_RIGHT=A2; 
+
+
+//Ultrasonic Sensors
+int MAX_DISTANCE = 200;
+NewPing sonicLEFT(1,1,MAX_DISTANCE); //Left Side D1
+NewPing sonicCENTER(2,2,MAX_DISTANCE); //Cen D2
+NewPing sonicRIGHT(4,4,MAX_DISTANCE); //Right Side D4
+
+int ML_LEFT_value; 
+int ML_CENTER_value;
+int ML_RIGHT_value; 
+int US1_value;
+int US2_value;
+int US3_value; 
+
+void setup() {
+   pinMode(ML_LEFT, INPUT); //ML_LEFT sensor input added as digital input
+   pinMode(ML_CENTER, INPUT);
+   pinMode(ML_RIGHT, INPUT);
+   Serial.begin(9600); // Serial communication started with 9600 bits per second.
+}
+
+void loop() {
+  ML_LEFT_value=digitalRead(ML_LEFT); // 1 = Black and 0 = White
+  ML_CENTER_value=digitalRead(ML_CENTER);
+  ML_RIGHT_value=digitalRead(ML_RIGHT);
+  Serial.println("Line Sensors: LCR 1=B 0=W");
+  Serial.print(ML_LEFT_value);
+  Serial.print(ML_CENTER_value);
+  Serial.print(ML_RIGHT_value);
+  Serial.println("");
+  delay(1000);  // we are adding 100 ms delay for delay at readings. 
+  US1_value = sonicLEFT.ping_cm();
+  US2_value = sonicCENTER.ping_cm();
+  US3_value = sonicRIGHT.ping_cm();
+  Serial.println("Ultrasonic Sensors: LCR Dist(cm)");
+  Serial.print(US1_value);
+  Serial.print(" - ");
+  Serial.print(US2_value);
+  Serial.print(" - ");
+  Serial.print(US3_value);
+  Serial.println("");
+  delay(1000);  // we are adding 100 ms delay for delay at readings. 
+  }
