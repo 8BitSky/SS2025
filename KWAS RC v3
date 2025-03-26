@@ -1,0 +1,107 @@
+ #include <TELEOP.h>   // TETRIX TeleOp module Library
+ #include <PRIZM.h>    // TETRIX PRIZM Library
+ 
+ PRIZM prizm;          // Create an instance within the PRIZM Library class named prizm
+ PS4 ps4;              // Create an instance within the PS4 Library class named ps4
+ EXPANSION exc;
+ 
+ int PowerM1;          // Channel 1 Motor Power
+ int PowerM2;          // Channel 2 Motor Power
+ 
+ void setup() {
+ 
+   prizm.PrizmBegin();            // Intializes the PRIZM controller and waits here for press of green start button
+   ps4.setDeadZone (LEFT,10);     // Sets a Left Joystick Dead Zone axis range of +/- 10 about center stick
+   ps4.setDeadZone(RIGHT,10);     // Sets a Right Joystick Dead Zone axis range of +/- 10 about center stick
+   exc.resetEncoder(1,1);
+   prizm.setMotorInvert(1,1);
+   exc.setMotorInvert(1,1,1);
+   StartServoPos();
+ }
+ 
+
+ void loop() {
+ 
+   ps4.getPS4();                                
+ 
+   if(ps4.Connected){                          
+       //Motors
+       PowerM1 = ps4.Motor(RY);              
+       PowerM2 = ps4.Motor(LY);                  
+       prizm.setMotorPowers(-PowerM1, -PowerM2);  
+
+       if(ps4.Button(UP)){
+          prizm.setCRServoState(1,100);
+          }  
+          else {
+            prizm.setCRServoState(1,0);;
+          }
+         
+                 if(ps4.Button(DOWN)){
+          prizm.setCRServoState(1,-100);
+          }  
+          else {
+            prizm.setCRServoState(1,0);;
+          }
+       
+       if(ps4.Button(CROSS)){
+         ThrowSnowball();
+       }
+
+       if(ps4.Button(R2)){
+         WristUp();
+       }
+       if(ps4.Button(R1)){
+         WristDown();
+       }
+       if(ps4.Button(SQUARE)){
+        WristFlat();
+       }
+       if(ps4.Button(L2)){
+         ClawClosed();
+       }
+       if(ps4.Button(L1)){
+         ClawOpen();
+       }
+       
+   }
+   else{                                         // If PS4 is not connected, stop motors
+       prizm.setMotorPowers(0,0);
+   }
+ }
+
+void WristDown(){
+   prizm.setServoPosition(1,5);
+}
+void WristUp(){
+   prizm.setServoPosition(1,175);
+}
+void WristFlat(){
+   prizm.setServoPosition(1,80);
+}
+void ClawOpen(){
+  prizm.setServoPosition(2,0);
+}
+void ClawClosed(){
+  prizm.setServoPosition(2,30);
+}
+
+void ThrowSnowball() {
+exc.setMotorDegree(1,1,720,10);
+delay(1500);
+
+exc.setMotorPower(1,1,125);
+delay(500);
+
+exc.setMotorPower(1,1,50);
+exc.setMotorDegree(1,1,50,2);
+delay(500);
+
+exc.setMotorPower(1,1,0);
+delay(2000);
+ }
+
+void StartServoPos(){
+  prizm.setServoPosition(1,20);
+   delay(500);
+}
