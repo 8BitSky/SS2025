@@ -1,0 +1,35 @@
+#include <xmotion.h>
+
+void setup() {
+  // put your setup code here, to run once:
+
+}
+
+void loop() {
+  //moveFoward();
+  //turnLeft();
+  //turnRight();
+  //pivotLeft();
+  //stopMotors();
+
+}
+
+void moveForward() {
+
+}
+
+void turnLeft() {
+  
+}
+
+void turnRight() {
+  
+}
+
+void pivotLeft() {
+
+}
+
+void stopMotors() {
+
+}
