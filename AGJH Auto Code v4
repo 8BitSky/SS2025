@@ -45,7 +45,7 @@ void setup() {
   pinMode(ML_Sensor_Right, INPUT);
 
   //Start Button
-  pinMode(START_BUTTON, INPUT);
+  pinMode(START_BUTTON , INPUT_PULLUP);
 
   // Initialize motor control pins here
   // e.g., pinMode(pwmLeft, OUTPUT); pinMode(dirLeft, OUTPUT); etc.
