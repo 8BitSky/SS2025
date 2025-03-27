@@ -10,7 +10,7 @@ const int ML_Sensor_Right  = A2;    // Right line sensor
 
 int MoveForwardDelay = 200;
 int PivotDelay = 200;
-int BASE_SPEED = 20;
+int BASE_SPEED = 15;
 int WALL_DISTANCE = 18;
 
 //Buttons
@@ -212,7 +212,7 @@ xmotion.StopMotors(200);
 xmotion.Forward(BASE_SPEED, 200); //Attempt to push out snowball
 xmotion.Backward(BASE_SPEED, 1000);
 while (!digitalRead(ML_Sensor_Left)){
-  xmotion.ArcTurn(-50,50,100);
+  xmotion.ArcTurn(-30,30,50);
   }
 findLine();
 }
@@ -220,5 +220,4 @@ findLine();
 void stopMotors() {
 xmotion.StopMotors(30);
 }
-
 
