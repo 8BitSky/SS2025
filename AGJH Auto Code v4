@@ -8,7 +8,7 @@ const int ML_Sensor_Left   = A5;    // Left line sensor
 const int ML_Sensor_Center = A4;    // Center line sensor (ideally centered)
 const int ML_Sensor_Right  = A2;    // Right line sensor
 
-int MoveFowardDelay = 200;
+int MoveForwardDelay = 200;
 int PivotDelay = 200;
 int BASE_SPEED = 20;
 int WALL_DISTANCE = 18;
@@ -22,8 +22,6 @@ int WALL_DISTANCE = 18;
 NewPing US_LEFT(1,1, MAX_DISTANCE);
 NewPing US_CENTER(2,2, MAX_DISTANCE);
 NewPing US_RIGHT(4,4, MAX_DISTANCE);
-
-int lineThreshhold = 200;
 
 // Enum to handle the robot's state
 enum RobotState {
@@ -45,6 +43,9 @@ void setup() {
   pinMode(ML_Sensor_Left, INPUT);
   pinMode(ML_Sensor_Center, INPUT);
   pinMode(ML_Sensor_Right, INPUT);
+
+  //Start Button
+  pinMode(START_BUTTON, INPUT);
 
   // Initialize motor control pins here
   // e.g., pinMode(pwmLeft, OUTPUT); pinMode(dirLeft, OUTPUT); etc.
@@ -149,7 +150,7 @@ void findLine() {
          !digitalRead(ML_Sensor_Center) &&
          !digitalRead(ML_Sensor_Right)) {
 
-    // Read left and right ultrasonic sensor distances (in inches)
+    // Read left and right ultrasonic sensor distances (in cm)
     float leftDistance = US_LEFT.ping_cm();;
     float rightDistance = US_RIGHT.ping_cm();;
 
@@ -197,13 +198,13 @@ xmotion.Forward(BASE_SPEED,200);
 void turnLeft() {
 // Left Motor BASE_SPEED-5, Right Motor BASE_SPEED+5, duration 50 ms. Right spins faster and moves robot left.
 // xmotion.ArcTurn(LeftSpeed,RightSpeed,duration)
-xmotion.ArcTurn(BASE_SPEED-5,BASE_SPEED+5,50)
+xmotion.ArcTurn(BASE_SPEED-5,BASE_SPEED+5,50);
 }
 
 void turnRight() {
 // Left Motor BASE_SPEED+5, Right Motor BASE_SPEED-5, duration 50 ms. Left spins faster and moves robot right.
 // xmotion.ArcTurn(LeftSpeed,RightSpeed,duration)
-xmotion.ArcTurn(BASE_SPEED+5,BASE_SPEED-5,50)
+xmotion.ArcTurn(BASE_SPEED+5,BASE_SPEED-5,50);
 }
 
 void pivotLeft() {
