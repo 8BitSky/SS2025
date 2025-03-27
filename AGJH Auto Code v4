@@ -15,7 +15,7 @@ int WALL_DISTANCE = 18;
 
 //Buttons
 #define START_BUTTON         10   // Button to start
-#define START_DELAY     1000      //  12 seconds
+#define START_DELAY     5000      //  5 seconds
 
 //Ultrasonic
 #define MAX_DISTANCE 200
@@ -27,7 +27,7 @@ int lineThreshhold = 200;
 
 // Enum to handle the robot's state
 enum RobotState {
-  WAIT_DEBOUNCE,
+  WAIT_BUTTON,
   LINE_FOLLOW,  
   PIVOT_180,     
   SEARCH_LINE,   
@@ -37,7 +37,7 @@ enum RobotState {
 unsigned long debounceStart = 0;
 unsigned long lostLineTimer = 0;
 
-RobotState currentState = LINE_FOLLOW;
+RobotState currentState = WAIT_BUTTON;
 
 // ----- Setup -----
 void setup() {
@@ -57,7 +57,7 @@ void setup() {
 void loop() {
   switch (currentState) {
 
-    case WAIT_DEBOUNCE:
+    case WAIT_BUTTON:
       // Wait for the button to be pressed.
       if (digitalRead(START_BUTTON) == LOW) {
       // Block until the button is released.
