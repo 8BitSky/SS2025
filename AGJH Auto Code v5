@@ -1,0 +1,340 @@
+#include <xmotion.h>
+#include <NewPing.h>
+
+// ----- Pin Definitions & Constants -----
+const int ML_Sensor_Left   = A5;    // Left line sensor
+const int ML_Sensor_Center = A4;    // Center line sensor
+const int ML_Sensor_Right  = A2;    // Right line sensor
+
+// Button
+#define START_BUTTON   10       // Button to start
+
+// Control Variables
+int BASE_SPEED = 15;
+
+// Debug Delay Variable(s)
+const unsigned long COUNTDOWN_DURATION = 10000; // Countdown duration (ms) for start
+
+// Ultrasonic Sensors (mounted on the left, center, and right of the robot)
+#define MAX_DISTANCE 200
+NewPing US_LEFT(1, 1, MAX_DISTANCE);
+NewPing US_CENTER(2, 2, MAX_DISTANCE);
+NewPing US_RIGHT(4, 4, MAX_DISTANCE);
+
+// ----- Line Sensor Threshold -----
+// Based on your calibration, black returns ~745–784 and white ~22–26.
+const int LINE_THRESHOLD = 500;
+
+// ----- Timeout & Turn Around Settings -----
+const unsigned long LOST_LINE_TIMEOUT = 600;   // Time (ms) to decide line is lost
+const unsigned long TURN_AROUND_DURATION = 2500; // Maximum duration (ms) for the turn-around pivot
+
+// ----- Ultrasonic Alignment Settings -----
+const int IDEAL_DIST = 15;      // Ideal distance from wall (in cm)
+const int TOLERANCE = 3;        // Allowable deviation (in cm)
+const int MISSING_THRESHOLD = IDEAL_DIST + 10;  // If left sensor reads >25 cm, left wall is missing
+
+// ----- End-of-Line Wall Detection Settings -----
+const int FRONT_WALL_THRESHOLD = 10;      // Front sensor reading < 22 cm indicates a wall
+const int RIGHT_WALL_THRESHOLD = 20;        // Right sensor reading < 22 cm indicates a wall
+const int LEFT_OPEN_THRESHOLD = 30;         // Left sensor reading > 20 cm indicates an opening
+
+// ----- Backup Parameters -----
+const int FRONT_BACKUP_THRESHOLD = 25;  // Continue backing up until front sensor reads at least 40 cm
+const int BACKUP_SPEED = 15;            // Increased backup speed
+const int BACKUP_DURATION = 100;        // Increased backup duration per burst (ms)
+
+// ----- State Machine Definition -----
+enum RobotState {
+  IDLE,         // Waiting for start button press
+  COUNTDOWN,    // LED countdown before starting
+  FOLLOW_LINE,  // Normal line following operation
+  WALL_DETECTED,// End-of-line wall detected
+  LOST_LINE,    // Line lost (non-wall condition)
+  ALIGN         // Using ultrasonic alignment in search mode
+};
+
+RobotState currentState = IDLE;
+
+// Timing variables
+unsigned long countdownStart = 0;
+unsigned long lastLineTime = 0;
+
+// Keeps track of which sensor last saw the line
+enum SensorPosition { NONE, LEFT, CENTER, RIGHT };
+SensorPosition lastSensor = NONE;
+
+// ----- Helper Function: End-of-Line Wall Detection -----
+// Returns true when the center and right sensors detect a very close wall (readings < FRONT_WALL_THRESHOLD)
+// and the left sensor shows an opening (reading > LEFT_OPEN_THRESHOLD).
+bool checkWallEnd() {
+  int centerDist = US_CENTER.ping_cm();
+  int rightDist  = US_RIGHT.ping_cm();
+  int leftDist   = US_LEFT.ping_cm();
+  
+  Serial.print("checkWallEnd() - Center: ");
+  Serial.print(centerDist);
+  Serial.print(" cm, Right: ");
+  Serial.print(rightDist);
+  Serial.print(" cm, Left: ");
+  Serial.print(leftDist);
+  Serial.println(" cm");
+  
+  if (centerDist > 0 && rightDist > 0 && leftDist > 0) {
+    if (centerDist < FRONT_WALL_THRESHOLD &&
+        rightDist  < RIGHT_WALL_THRESHOLD &&
+        leftDist   > LEFT_OPEN_THRESHOLD) {
+      Serial.println("checkWallEnd() - Wall end condition met.");
+      return true;
+    }
+  }
+  return false;
+}
+
+// ----- Helper Function: Backup from Wall -----
+// Backs up until the front sensor (US_CENTER) reads greater than FRONT_BACKUP_THRESHOLD.
+void backUpFromWall() {
+  int frontDist = US_CENTER.ping_cm();
+  Serial.print("Initial front sensor reading for backup: ");
+  Serial.println(frontDist);
+  // Continue backing up until front distance is greater than FRONT_BACKUP_THRESHOLD.
+  while ((frontDist == 0) || (frontDist > 0 && frontDist < FRONT_BACKUP_THRESHOLD)) {
+    Serial.print("Backing up, front sensor: ");
+    Serial.println(frontDist);
+    xmotion.Backward(BACKUP_SPEED, BACKUP_DURATION);
+    delay(50);
+    frontDist = US_CENTER.ping_cm();
+  }
+  Serial.print("Backup complete. Front sensor reading: ");
+  Serial.println(frontDist);
+}
+
+// ----- Movement and Helper Functions -----
+void moveForward() {
+  xmotion.Forward(BASE_SPEED, 100);
+}
+
+void turnLeft() {
+  xmotion.ArcTurn(BASE_SPEED, BASE_SPEED + 8, 10);
+}
+
+void turnRight() {
+  xmotion.ArcTurn(BASE_SPEED + 8, BASE_SPEED, 10);
+}
+
+void turnAround() {
+  Serial.println("Executing turn-around maneuver.");
+  xmotion.StopMotors(500);
+  xmotion.Backward(15, 300);
+  xmotion.StopMotors(500);
+  unsigned long startTime = millis();
+  while (millis() - startTime < TURN_AROUND_DURATION) {
+    int leftVal   = analogRead(ML_Sensor_Left);
+    int centerVal = analogRead(ML_Sensor_Center);
+    int rightVal  = analogRead(ML_Sensor_Right);
+    bool leftLine   = (leftVal > LINE_THRESHOLD);
+    bool centerLine = (centerVal > LINE_THRESHOLD);
+    bool rightLine  = (rightVal > LINE_THRESHOLD);
+    
+    if (leftLine || centerLine || rightLine) {
+      Serial.println("Line detected during turn-around. Breaking out.");
+      break;
+    }
+    xmotion.Right0(15, 10);
+  }
+  xmotion.StopMotors(100);
+}
+
+void alignCorridor() {
+  int leftDist   = US_LEFT.ping_cm();
+  int centerDist = US_CENTER.ping_cm();
+  int rightDist  = US_RIGHT.ping_cm();
+  
+  if (leftDist == 0 || rightDist == 0) {
+    Serial.println("Ultrasonic error in alignment. Moving forward.");
+    moveForward();
+    return;
+  }
+  
+  Serial.print("alignCorridor() - Left: ");
+  Serial.print(leftDist);
+  Serial.print(" cm, Center: ");
+  Serial.print(centerDist);
+  Serial.print(" cm, Right: ");
+  Serial.print(rightDist);
+  Serial.println(" cm");
+  
+  if (leftDist > MISSING_THRESHOLD) {
+    Serial.println("Missing left wall segment detected during alignment.");
+    if (rightDist < IDEAL_DIST - TOLERANCE) {
+      turnRight();
+    } else if (rightDist > IDEAL_DIST + TOLERANCE) {
+      turnLeft();
+    } else {
+      moveForward();
+    }
+    return;
+  }
+  
+  int diff = leftDist - rightDist;
+  if (abs(diff) <= TOLERANCE) {
+    Serial.println("Corridor aligned; moving forward slowly.");
+    moveForward();
+  } else if (diff > TOLERANCE) {
+    Serial.println("Robot shifted right; adjusting left.");
+    turnLeft();
+  } else {
+    Serial.println("Robot shifted left; adjusting right.");
+    turnRight();
+  }
+}
+
+void setup() {
+  // Initialize sensor pins.
+  pinMode(ML_Sensor_Left, INPUT);
+  pinMode(ML_Sensor_Center, INPUT);
+  pinMode(ML_Sensor_Right, INPUT);
+  
+  // Initialize the button pin.
+  pinMode(START_BUTTON, INPUT_PULLUP);
+  
+  Serial.begin(9600);
+  
+  currentState = IDLE;
+  Serial.println("Robot idle. Waiting for start button press...");
+}
+
+void loop() {
+  switch (currentState) {
+    
+    case IDLE: {
+      if (digitalRead(START_BUTTON) == LOW) {
+        Serial.println("Button pressed! Starting countdown...");
+        countdownStart = millis();
+        currentState = COUNTDOWN;
+      }
+      break;
+    }
+    
+    case COUNTDOWN: {
+      xmotion.ToggleLeds(1000);
+      if (millis() - countdownStart >= COUNTDOWN_DURATION) {
+        Serial.println("Countdown complete. Starting line following.");
+        lastLineTime = millis();
+        currentState = FOLLOW_LINE;
+      }
+      break;
+    }
+    
+    case FOLLOW_LINE: {
+      int leftVal   = analogRead(ML_Sensor_Left);
+      int centerVal = analogRead(ML_Sensor_Center);
+      int rightVal  = analogRead(ML_Sensor_Right);
+      
+      bool leftLine   = (leftVal > LINE_THRESHOLD);
+      bool centerLine = (centerVal > LINE_THRESHOLD);
+      bool rightLine  = (rightVal > LINE_THRESHOLD);
+      
+      Serial.print("Line Sensors - Left: ");
+      Serial.print(leftVal);
+      Serial.print(" | Center: ");
+      Serial.print(centerVal);
+      Serial.print(" | Right: ");
+      Serial.println(rightVal);
+      
+      // Check for an abrupt line ending even if a line is detected.
+      if ((leftLine || centerLine || rightLine) && checkWallEnd()) {
+        Serial.println("Abrupt line ending detected. Transitioning to WALL_DETECTED state.");
+        currentState = WALL_DETECTED;
+        break;
+      }
+      
+      if (leftLine || centerLine || rightLine) {
+        lastLineTime = millis();
+        if (centerLine) {
+          lastSensor = CENTER;
+          moveForward();
+        }
+        else if (leftLine) {
+          lastSensor = LEFT;
+          turnLeft();
+        }
+        else if (rightLine) {
+          lastSensor = RIGHT;
+          turnRight();
+        }
+      }
+      else {
+        if (checkWallEnd()) {
+          Serial.println("End-of-line wall detected.");
+          currentState = WALL_DETECTED;
+        }
+        else if (millis() - lastLineTime > LOST_LINE_TIMEOUT) {
+          Serial.println("Line lost. Transitioning to LOST_LINE state.");
+          currentState = LOST_LINE;
+        }
+      }
+      break;
+    }
+    
+    case WALL_DETECTED: {
+      Serial.println("WALL_DETECTED state: Backing up from wall...");
+      backUpFromWall();
+      Serial.println("WALL_DETECTED state: Executing turn-around after backup.");
+      turnAround();
+      
+      // Wait until wall condition clears (up to 5 seconds).
+      unsigned long waitStart = millis();
+      while (millis() - waitStart < 5000) {
+        int centerDist = US_CENTER.ping_cm();
+        int rightDist  = US_RIGHT.ping_cm();
+        int leftDist   = US_LEFT.ping_cm();
+        Serial.print("Waiting - Ultrasonic readings: Center: ");
+        Serial.print(centerDist);
+        Serial.print(" cm, Right: ");
+        Serial.print(rightDist);
+        Serial.print(" cm, Left: ");
+        Serial.println(leftDist);
+        if (!checkWallEnd()) break;
+        delay(100);
+      }
+      
+      Serial.println("Clear from wall. Resuming line following.");
+      lastLineTime = millis();
+      lastSensor = NONE;
+      currentState = FOLLOW_LINE;
+      break;
+    }
+    
+    case LOST_LINE: {
+      Serial.println("Executing lost-line turn-around.");
+      turnAround();
+      lastLineTime = millis();
+      lastSensor = NONE;
+      currentState = ALIGN;
+      break;
+    }
+    
+    case ALIGN: {
+      alignCorridor();
+      int leftVal   = analogRead(ML_Sensor_Left);
+      int centerVal = analogRead(ML_Sensor_Center);
+      int rightVal  = analogRead(ML_Sensor_Right);
+      bool leftLine   = (leftVal > LINE_THRESHOLD);
+      bool centerLine = (centerVal > LINE_THRESHOLD);
+      bool rightLine  = (rightVal > LINE_THRESHOLD);
+      if (leftLine || centerLine || rightLine) {
+        Serial.println("Line detected during alignment. Resuming line following.");
+        lastLineTime = millis();
+        currentState = FOLLOW_LINE;
+      }
+      break;
+    }
+    
+    default:
+      currentState = IDLE;
+      break;
+  }
+  
+  delay(50);
+}
